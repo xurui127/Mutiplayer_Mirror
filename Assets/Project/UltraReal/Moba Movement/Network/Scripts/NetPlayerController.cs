@@ -35,7 +35,8 @@ namespace UltraReal.MobaMovement
             }
             else
             {
-
+                player1Hat.SetActive(false);
+                player2Hat.SetActive(true);
             }
         }
         private void Update()
@@ -56,6 +57,10 @@ namespace UltraReal.MobaMovement
             }
             if (Input.GetKeyDown(KeyCode.Alpha1))
             {
+                GetComponent<NavMeshAgent>().destination = transform.position;
+                transform.LookAt(new Vector3(hitInfo.point.x, transform.position.y, hitInfo.point.z));
+                GetComponent<MobaAnimate>()._animator.SetTrigger("Spell");
+
                 CmdSpell(hitInfo.point);
             }
             GetHoverInfo();
@@ -203,4 +208,12 @@ namespace UltraReal.MobaMovement
             NetworkServer.Spawn(fireball);
 
             RpcSyncFireball(fireball, dir);
-            Destroy(f
+            Destroy(fireball, 3f);
+        }
+        [ClientRpc]
+        private void RpcSyncFireball(GameObject fireball, Vector3 direction)
+        {
+            fireball.GetComponent<FireBall>().Init(direction);
+        }
+    }
+}
