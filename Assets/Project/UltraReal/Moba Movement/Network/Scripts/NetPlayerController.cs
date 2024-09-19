@@ -12,13 +12,22 @@ namespace UltraReal.MobaMovement
         public GameObject fireBall;
         public Transform castPosition;
         public GameObject fireBallOnHand;
+        public GameObject fireExplosion;
 
         [SyncVar(hook = nameof(OnHealthChanged))]
-        private int health = 3;
+        private int health = 5;
 
         private const float deathAnimDelay = 3f;
         public GameObject player1Hat;
         public GameObject player2Hat;
+
+        [Header("Cast Spell CD")]
+        private const float spellCD = 1f;
+        private float spellDuration;
+
+        [Header("Health")]
+        public HealthBarController healthBarController;
+        private bool isDead = false;
         // Start is called before the first frame update
         void Start()
         {
@@ -31,18 +40,26 @@ namespace UltraReal.MobaMovement
                 var ma = GetComponent<MobaAnimate>();
                 ma.enabled = true;
                 UIController.instance.UpdateHealth(health);
+                healthBarController.SetHealthImage(health);
                 player1Hat.SetActive(true);
                 player2Hat.SetActive(false);
+                spellDuration = -1f;
             }
             else
             {
                 player1Hat.SetActive(false);
                 player2Hat.SetActive(true);
             }
+
         }
         private void Update()
         {
             if (!isLocalPlayer) return;
+
+            if (spellDuration > 0)
+            {
+                spellDuration -= Time.deltaTime;
+            }
 
             if (Input.GetKey(KeyCode.Q))
             {
@@ -56,17 +73,19 @@ namespace UltraReal.MobaMovement
             {
                 CmdChangePlayerState(2);
             }
-            if (Input.GetKeyDown(KeyCode.Alpha1))
+            if (Input.GetKeyDown(KeyCode.Alpha1) && spellDuration < 0)
             {
-                GetComponent<NavMeshAgent>().destination = transform.position;
+                GetComponent<NavMeshAgent>().isStopped = true;
                 transform.LookAt(new Vector3(hitInfo.point.x, transform.position.y, hitInfo.point.z));
-                GetComponent<MobaAnimate>()._animator.SetTrigger("Spell");
-                fireBallOnHand.SetActive(true);
+
                 CmdSpell(hitInfo.point);
+                spellDuration = spellCD;
             }
             GetHoverInfo();
             LeftMouseClick();
+
         }
+
 
         [Command]
         private void CmdChangePlayerState(int index)
@@ -103,6 +122,20 @@ namespace UltraReal.MobaMovement
         {
             if (collision.gameObject.tag.Equals("Spell"))
             {
+                var fireBall = collision.gameObject.GetComponent<FireBall>();
+                if (fireBall == null)
+                {
+                    Debug.Log("Fire Ball component not found on the colliderd object.");
+                    return;
+                }
+                if (GetComponent<NetworkIdentity>().connectionToClient == fireBall.owner.connectionToClient)
+                {
+                    Debug.Log("Hit");
+                    return;
+                }
+
+
+
                 if (health > 0)
                 {
                     health--;
@@ -111,29 +144,46 @@ namespace UltraReal.MobaMovement
                 if (health <= 0)
                 {
                     StartCoroutine(DestroyPlayer(deathAnimDelay));
+                    if (!isDead)
+                    {
+                        TargerAddGold(fireBall.owner.connectionToClient, 10);
+                    }
+                    isDead = true;
                 }
+
+                FireBallExplosion(collision.contacts[0],fireBall.direction);
+                Destroy(collision.gameObject);
             }
+        }
+
+        private void FireBallExplosion(ContactPoint point,Vector3 direction)
+        {
+            Quaternion explosionRotation = Quaternion.LookRotation(direction * -1);
+            GameObject explosion = Instantiate(fireExplosion, point.point, explosionRotation);
+            NetworkServer.Spawn(explosion);
+            Destroy(explosion, 1f);
         }
         private void OnHealthChanged(int oldValue, int newValue)
         {
             if (isLocalPlayer)
             {
-
                 UIController.instance.UpdateHealth(health);
             }
 
 
             HandleAnimations(health);
-
+            RpcUpdateHealthBar(health);
         }
         private void HandleAnimations(int currentHealth)
         {
             if (currentHealth > 0)
             {
+                healthBarController.SetHealthImage(currentHealth);
                 GetComponent<MobaAnimate>()._animator.SetTrigger("Hit");
             }
             else
             {
+                healthBarController.SetHealthImage(currentHealth);
                 GetComponent<MobaAnimate>()._animator.SetTrigger("Dead");
             }
 
@@ -189,32 +239,54 @@ namespace UltraReal.MobaMovement
             TargerAddGold(netIdentity.connectionToClient, 100);
             RpcOpenChest(chest);
         }
-       
+
         [ClientRpc]
         private void RpcOpenChest(GameObject chest)
         {
             chest.GetComponent<ChestController>().OpenChest();
         }
-        private IEnumerator CastSpellDelay(float delay, Vector3 hitPoint)
+        private IEnumerator CastSpellDelay(float delay, Vector3 hitPoint, NetworkIdentity owner)
         {
             yield return new WaitForSeconds(delay);
             var fireball = Instantiate(fireBall, castPosition.transform.position, castPosition.rotation);
             var dir = (hitPoint - castPosition.transform.position).normalized;
-            fireBallOnHand.SetActive(false);
-            fireball.GetComponent<FireBall>().Init(dir);
+            RpcSetFireBallOnHand(false);
+            fireball.GetComponent<FireBall>().Init(dir, owner);
             NetworkServer.Spawn(fireball);
-            RpcSyncFireball(fireball, dir);
+            RpcSyncFireball(fireball, dir, owner);
             Destroy(fireball, 3f);
         }
+
         [Command]
         private void CmdSpell(Vector3 hitPoint)
         {
-            StartCoroutine(CastSpellDelay(0.6f, hitPoint));
+            var owner = connectionToClient.identity;
+            RpcSpell();
+            StartCoroutine(CastSpellDelay(0.6f, hitPoint, owner));
         }
         [ClientRpc]
-        private void RpcSyncFireball(GameObject fireball, Vector3 direction)
+        private void RpcSpell()
         {
-            fireball.GetComponent<FireBall>().Init(direction);
+            fireBallOnHand.SetActive(true);
+            GetComponent<MobaAnimate>()._animator.SetTrigger("Spell");
+        }
+        [ClientRpc]
+        private void RpcSetFireBallOnHand(bool active)
+        {
+            fireBallOnHand.SetActive(active);
+            if (isLocalPlayer)
+            {
+                GetComponent<NavMeshAgent>().isStopped = false;
+            }
+        }
+        [ClientRpc]
+        private void RpcSyncFireball(GameObject fireball, Vector3 direction, NetworkIdentity owner)
+        {
+            fireball.GetComponent<FireBall>().Init(direction, owner);
+        }
+        private void RpcUpdateHealthBar(int currentHealth)
+        {
+            healthBarController.SetHealthImage(currentHealth);
         }
     }
 }
