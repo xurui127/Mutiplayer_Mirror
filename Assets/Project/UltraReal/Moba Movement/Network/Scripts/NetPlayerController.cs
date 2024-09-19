@@ -11,6 +11,7 @@ namespace UltraReal.MobaMovement
 
         public GameObject fireBall;
         public Transform castPosition;
+        public GameObject fireBallOnHand;
 
         [SyncVar(hook = nameof(OnHealthChanged))]
         private int health = 3;
@@ -60,7 +61,7 @@ namespace UltraReal.MobaMovement
                 GetComponent<NavMeshAgent>().destination = transform.position;
                 transform.LookAt(new Vector3(hitInfo.point.x, transform.position.y, hitInfo.point.z));
                 GetComponent<MobaAnimate>()._animator.SetTrigger("Spell");
-
+                fireBallOnHand.SetActive(true);
                 CmdSpell(hitInfo.point);
             }
             GetHoverInfo();
@@ -96,8 +97,6 @@ namespace UltraReal.MobaMovement
                 var netIdentity = GetComponent<NetworkIdentity>();
                 TargerAddGold(netIdentity.connectionToClient, 1);
             }
-
-
         }
         [ServerCallback]
         private void OnCollisionEnter(Collision collision)
@@ -190,25 +189,27 @@ namespace UltraReal.MobaMovement
             TargerAddGold(netIdentity.connectionToClient, 100);
             RpcOpenChest(chest);
         }
+       
         [ClientRpc]
         private void RpcOpenChest(GameObject chest)
         {
             chest.GetComponent<ChestController>().OpenChest();
         }
+        private IEnumerator CastSpellDelay(float delay, Vector3 hitPoint)
+        {
+            yield return new WaitForSeconds(delay);
+            var fireball = Instantiate(fireBall, castPosition.transform.position, castPosition.rotation);
+            var dir = (hitPoint - castPosition.transform.position).normalized;
+            fireBallOnHand.SetActive(false);
+            fireball.GetComponent<FireBall>().Init(dir);
+            NetworkServer.Spawn(fireball);
+            RpcSyncFireball(fireball, dir);
+            Destroy(fireball, 3f);
+        }
         [Command]
         private void CmdSpell(Vector3 hitPoint)
         {
-            var lookAtPosition = new Vector3(hitPoint.x, transform.position.y, hitPoint.z);
-            transform.LookAt(lookAtPosition);
-
-            var fireball = Instantiate(fireBall, castPosition.transform.position, castPosition.rotation);
-            var dir = (hitPoint - castPosition.transform.position).normalized;
-
-            fireball.GetComponent<FireBall>().Init(dir);
-            NetworkServer.Spawn(fireball);
-
-            RpcSyncFireball(fireball, dir);
-            Destroy(fireball, 3f);
+            StartCoroutine(CastSpellDelay(0.6f, hitPoint));
         }
         [ClientRpc]
         private void RpcSyncFireball(GameObject fireball, Vector3 direction)
