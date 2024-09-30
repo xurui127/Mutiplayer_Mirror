@@ -1,9 +1,12 @@
 ﻿using Mirror;
+using System;
 using System.Collections;
+using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI;
 namespace UltraReal.MobaMovement
 {
+
     public class NetPlayerController : NetworkBehaviour
     {
         public GameObject[] avatars;
@@ -28,6 +31,16 @@ namespace UltraReal.MobaMovement
         [Header("Health")]
         public HealthBarController healthBarController;
         private bool isDead = false;
+
+        public enum Avatar
+        {
+            Mage,
+            Eagle,
+            Fox
+        }
+        public Avatar curAvatars;
+
+        public bool isStun = false;
         // Start is called before the first frame update
         void Start()
         {
@@ -60,37 +73,80 @@ namespace UltraReal.MobaMovement
             {
                 spellDuration -= Time.deltaTime;
             }
+            if (isDead || isStun) return;
 
             if (Input.GetKey(KeyCode.Q))
             {
                 CmdChangePlayerState(0);
+                CmdChangeAvatar(0);
             }
             if (Input.GetKey(KeyCode.W))
             {
                 CmdChangePlayerState(1);
+                CmdChangeAvatar(1);
             }
             if (Input.GetKey(KeyCode.E))
             {
                 CmdChangePlayerState(2);
+                CmdChangeAvatar(2);
             }
-            if (Input.GetKeyDown(KeyCode.Alpha1) && spellDuration < 0)
+            if (Input.GetKeyDown(KeyCode.Alpha1) && spellDuration < 0 && curAvatars.Equals(Avatar.Mage))
             {
+                GetComponent<NavMeshAgent>().destination = transform.position;
                 GetComponent<NavMeshAgent>().isStopped = true;
                 transform.LookAt(new Vector3(hitInfo.point.x, transform.position.y, hitInfo.point.z));
 
                 CmdSpell(hitInfo.point);
                 spellDuration = spellCD;
             }
+            if (Input.GetKeyDown(KeyCode.Alpha1) &&
+                hitInfo.collider != null &&
+                hitInfo.collider.gameObject.tag.Equals("Player") &&
+                curAvatars.Equals(Avatar.Fox))
+            {
+                CmdStunPlayer(hitInfo.collider.gameObject);
+            }
             GetHoverInfo();
             LeftMouseClick();
 
         }
+        [Command]
+        private void CmdChangeAvatar(int index)
+        {
+            RpcChangeAvatar(index);
 
+        }
+        [Command]
+        private void CmdStunPlayer(GameObject player)
+        {
+            RpcStunPlayer(player);
+        }
+        [ClientRpc]
+        private void RpcStunPlayer(GameObject player)
+        {
+            player.GetComponentInParent<NetPlayerController>().isStun = true;
+            player.GetComponentInParent<NavMeshAgent>().enabled = false;
+        }
+        [ClientRpc]
+        private void RpcChangeAvatar(int index)
+        {
+            foreach (var avatar in avatars)
+            {
+                avatar.SetActive(false);
+                avatars[index].SetActive(true);
+                GetComponent<MobaAnimate>()._animator = avatars[index].GetComponent<Animator>();
+                GetComponent<NetworkAnimator>().animator = avatars[index].GetComponent<Animator>();
+            }
 
+            if (index == 0) curAvatars = Avatar.Mage;
+            else if (index == 1) curAvatars = Avatar.Eagle;
+            else curAvatars = Avatar.Fox;
+        }
         [Command]
         private void CmdChangePlayerState(int index)
         {
             RpcChangePlayerState(index);
+          
         }
         [ClientRpc]
         private void RpcChangePlayerState(int index)
@@ -151,12 +207,12 @@ namespace UltraReal.MobaMovement
                     isDead = true;
                 }
 
-                FireBallExplosion(collision.contacts[0],fireBall.direction);
+                FireBallExplosion(collision.contacts[0], fireBall.direction);
                 Destroy(collision.gameObject);
             }
         }
 
-        private void FireBallExplosion(ContactPoint point,Vector3 direction)
+        private void FireBallExplosion(ContactPoint point, Vector3 direction)
         {
             Quaternion explosionRotation = Quaternion.LookRotation(direction * -1);
             GameObject explosion = Instantiate(fireExplosion, point.point, explosionRotation);
@@ -165,6 +221,11 @@ namespace UltraReal.MobaMovement
         }
         private void OnHealthChanged(int oldValue, int newValue)
         {
+            if (isStun) 
+            {
+                isStun = false;
+                GetComponentInParent<NavMeshAgent>().enabled = true;
+            }
             if (isLocalPlayer)
             {
                 UIController.instance.UpdateHealth(health);
@@ -190,6 +251,7 @@ namespace UltraReal.MobaMovement
             if (currentHealth == 0 && isLocalPlayer)
             {
                 GetComponent<NavMeshAgent>().isStopped = true;
+                isDead = true;
             }
         }
         private IEnumerator DestroyPlayer(float delay)

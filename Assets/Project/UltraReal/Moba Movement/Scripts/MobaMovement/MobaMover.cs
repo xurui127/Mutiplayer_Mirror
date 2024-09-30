@@ -56,7 +56,7 @@ namespace UltraReal.MobaMovement
         ///</summary>
         public override void SetDestination(Vector3 location)
         {
-            if (agent != null && gameObject.activeSelf)
+            if (agent != null && gameObject.activeSelf && agent.enabled)
                 agent.SetDestination(location);
         }
         #endregion
