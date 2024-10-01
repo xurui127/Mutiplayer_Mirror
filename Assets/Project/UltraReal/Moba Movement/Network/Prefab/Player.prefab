@@ -2236,6 +2236,10 @@ MonoBehaviour:
   player1Hat: {fileID: 1127716251512991053}
   player2Hat: {fileID: 2723196252491114175}
   healthBarController: {fileID: 2945340049320810233}
+  curAvatars: 0
+  stunEffect: {fileID: 5720143101508120021, guid: 291e7920db47fc94eb36c0d4ef0e6b33, type: 3}
+  debuffPosition: {fileID: 4252809287209557396}
+  isStun: 0
 --- !u!114 &1122159046304749550
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3357,6 +3361,37 @@ Transform:
   - {fileID: 6525215821283404159}
   m_Father: {fileID: 840029198139714373}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &8858518754050658574
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 4252809287209557396}
+  m_Layer: 0
+  m_Name: DebuffPostion
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &4252809287209557396
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8858518754050658574}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.008, y: 1.654, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 5892256138642379948}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &8891251631708735162
 GameObject:
   m_ObjectHideFlags: 0
@@ -3968,6 +4003,9 @@ PrefabInstance:
       addedObject: {fileID: 843293005775176881}
     - targetCorrespondingSourceObject: {fileID: 2763914743243945539, guid: 25783ddf2fdb6c54689763802a2953ae, type: 3}
       insertIndex: 1
+      addedObject: {fileID: 4252809287209557396}
+    - targetCorrespondingSourceObject: {fileID: 2763914743243945539, guid: 25783ddf2fdb6c54689763802a2953ae, type: 3}
+      insertIndex: 2
       addedObject: {fileID: 1755585479184325362}
     - targetCorrespondingSourceObject: {fileID: 498838347967086120, guid: 25783ddf2fdb6c54689763802a2953ae, type: 3}
       insertIndex: 25

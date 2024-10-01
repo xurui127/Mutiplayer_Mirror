@@ -1,12 +1,10 @@
 ﻿using Mirror;
-using System;
 using System.Collections;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.AI;
+
 namespace UltraReal.MobaMovement
 {
-
     public class NetPlayerController : NetworkBehaviour
     {
         public GameObject[] avatars;
@@ -26,10 +24,12 @@ namespace UltraReal.MobaMovement
 
         [Header("Cast Spell CD")]
         private const float spellCD = 1f;
+
         private float spellDuration;
 
         [Header("Health")]
         public HealthBarController healthBarController;
+
         private bool isDead = false;
 
         public enum Avatar
@@ -38,11 +38,23 @@ namespace UltraReal.MobaMovement
             Eagle,
             Fox
         }
+
+        [Header("Avators")]
         public Avatar curAvatars;
 
+        [Header("Stun")]
+        public GameObject stunEffect;
+
+        public Transform debuffPosition;
+
         public bool isStun = false;
+
+        private const float stunCD = 6f;
+
+        private float stunDuration;
+
         // Start is called before the first frame update
-        void Start()
+        private void Start()
         {
             if (isLocalPlayer)
             {
@@ -57,14 +69,15 @@ namespace UltraReal.MobaMovement
                 player1Hat.SetActive(true);
                 player2Hat.SetActive(false);
                 spellDuration = -1f;
+                stunDuration = -1f;
             }
             else
             {
                 player1Hat.SetActive(false);
                 player2Hat.SetActive(true);
             }
-
         }
+
         private void Update()
         {
             if (!isLocalPlayer) return;
@@ -72,6 +85,10 @@ namespace UltraReal.MobaMovement
             if (spellDuration > 0)
             {
                 spellDuration -= Time.deltaTime;
+            }
+            if (stunDuration > 0) 
+            {
+                stunDuration -= Time.deltaTime;
             }
             if (isDead || isStun) return;
 
@@ -102,31 +119,49 @@ namespace UltraReal.MobaMovement
             if (Input.GetKeyDown(KeyCode.Alpha1) &&
                 hitInfo.collider != null &&
                 hitInfo.collider.gameObject.tag.Equals("Player") &&
-                curAvatars.Equals(Avatar.Fox))
+                curAvatars.Equals(Avatar.Fox) &&
+                stunDuration < 0)
             {
                 CmdStunPlayer(hitInfo.collider.gameObject);
+                stunDuration = stunCD;
             }
             GetHoverInfo();
             LeftMouseClick();
-
         }
+
         [Command]
         private void CmdChangeAvatar(int index)
         {
             RpcChangeAvatar(index);
-
         }
+
         [Command]
         private void CmdStunPlayer(GameObject player)
         {
+            RpcSpell();
+            player.GetComponentInParent<NetPlayerController>().isStun = true;
+            GameObject gb = Instantiate(stunEffect, player.GetComponent<NetPlayerController>().debuffPosition.position, Quaternion.identity);
+            NetworkServer.Spawn(gb);
             RpcStunPlayer(player);
+            Destroy(gb, 5f);
         }
+
         [ClientRpc]
         private void RpcStunPlayer(GameObject player)
         {
+            player.GetComponent<MobaAnimate>()._animator.SetTrigger("Stun");
             player.GetComponentInParent<NetPlayerController>().isStun = true;
             player.GetComponentInParent<NavMeshAgent>().enabled = false;
+            StartCoroutine(ReleaseStun(player, 5f));
         }
+
+        private IEnumerator ReleaseStun(GameObject player, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            player.GetComponent<NetPlayerController>().isStun = false;
+            player.GetComponent<NavMeshAgent>().enabled = true;
+        }
+
         [ClientRpc]
         private void RpcChangeAvatar(int index)
         {
@@ -142,12 +177,13 @@ namespace UltraReal.MobaMovement
             else if (index == 1) curAvatars = Avatar.Eagle;
             else curAvatars = Avatar.Fox;
         }
+
         [Command]
         private void CmdChangePlayerState(int index)
         {
             RpcChangePlayerState(index);
-          
         }
+
         [ClientRpc]
         private void RpcChangePlayerState(int index)
         {
@@ -159,11 +195,13 @@ namespace UltraReal.MobaMovement
                 GetComponent<NetworkAnimator>().animator = avatars[index].GetComponent<Animator>();
             }
         }
+
         [TargetRpc]
         private void TargerAddGold(NetworkConnection conn, int count)
         {
             UIController.instance.AddGold(count);
         }
+
         private void OnTriggerEnter(UnityEngine.Collider other)
         {
             if (other.gameObject.tag.Equals("Gold") && isServer)
@@ -173,6 +211,7 @@ namespace UltraReal.MobaMovement
                 TargerAddGold(netIdentity.connectionToClient, 1);
             }
         }
+
         [ServerCallback]
         private void OnCollisionEnter(Collision collision)
         {
@@ -189,8 +228,6 @@ namespace UltraReal.MobaMovement
                     Debug.Log("Hit");
                     return;
                 }
-
-
 
                 if (health > 0)
                 {
@@ -219,9 +256,10 @@ namespace UltraReal.MobaMovement
             NetworkServer.Spawn(explosion);
             Destroy(explosion, 1f);
         }
+
         private void OnHealthChanged(int oldValue, int newValue)
         {
-            if (isStun) 
+            if (isStun)
             {
                 isStun = false;
                 GetComponentInParent<NavMeshAgent>().enabled = true;
@@ -231,10 +269,10 @@ namespace UltraReal.MobaMovement
                 UIController.instance.UpdateHealth(health);
             }
 
-
             HandleAnimations(health);
             RpcUpdateHealthBar(health);
         }
+
         private void HandleAnimations(int currentHealth)
         {
             if (currentHealth > 0)
@@ -254,6 +292,7 @@ namespace UltraReal.MobaMovement
                 isDead = true;
             }
         }
+
         private IEnumerator DestroyPlayer(float delay)
         {
             yield return new WaitForSeconds(delay);
@@ -261,6 +300,7 @@ namespace UltraReal.MobaMovement
             TargetPlayerDead(networkIdentity.connectionToClient);
             Destroy(gameObject);
         }
+
         [TargetRpc]
         private void TargetPlayerDead(NetworkConnection conn)
         {
@@ -271,21 +311,20 @@ namespace UltraReal.MobaMovement
         private void DestroyCharacter()
         {
             NetworkServer.Destroy(gameObject);
-
         }
+
         private void GetHoverInfo()
         {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             Physics.Raycast(ray, out hitInfo);
         }
+
         private void LeftMouseClick()
         {
-
             if (Input.GetMouseButton(0) &&
                 hitInfo.collider.tag.Equals("Chest") &&
                 !hitInfo.collider.GetComponent<ChestController>().isOpened)
             {
-
                 float distance = Vector3.Distance(transform.position, hitInfo.collider.transform.position);
                 if (distance < 2f)
                 {
@@ -307,6 +346,7 @@ namespace UltraReal.MobaMovement
         {
             chest.GetComponent<ChestController>().OpenChest();
         }
+
         private IEnumerator CastSpellDelay(float delay, Vector3 hitPoint, NetworkIdentity owner)
         {
             yield return new WaitForSeconds(delay);
@@ -326,12 +366,14 @@ namespace UltraReal.MobaMovement
             RpcSpell();
             StartCoroutine(CastSpellDelay(0.6f, hitPoint, owner));
         }
+
         [ClientRpc]
         private void RpcSpell()
         {
-            fireBallOnHand.SetActive(true);
+            if (curAvatars.Equals(Avatar.Mage)) fireBallOnHand.SetActive(true);
             GetComponent<MobaAnimate>()._animator.SetTrigger("Spell");
         }
+
         [ClientRpc]
         private void RpcSetFireBallOnHand(bool active)
         {
@@ -341,11 +383,13 @@ namespace UltraReal.MobaMovement
                 GetComponent<NavMeshAgent>().isStopped = false;
             }
         }
+
         [ClientRpc]
         private void RpcSyncFireball(GameObject fireball, Vector3 direction, NetworkIdentity owner)
         {
             fireball.GetComponent<FireBall>().Init(direction, owner);
         }
+
         private void RpcUpdateHealthBar(int currentHealth)
         {
             healthBarController.SetHealthImage(currentHealth);
