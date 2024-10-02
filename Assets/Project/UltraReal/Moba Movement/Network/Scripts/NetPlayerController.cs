@@ -118,11 +118,12 @@ namespace UltraReal.MobaMovement
             }
             if (Input.GetKeyDown(KeyCode.Alpha1) &&
                 hitInfo.collider != null &&
+                hitInfo.collider.gameObject.transform.parent.gameObject != this.gameObject &&
                 hitInfo.collider.gameObject.tag.Equals("Player") &&
                 curAvatars.Equals(Avatar.Fox) &&
                 stunDuration < 0)
             {
-                CmdStunPlayer(hitInfo.collider.gameObject);
+                CmdStunPlayer(hitInfo.collider.gameObject.transform.parent.gameObject);
                 stunDuration = stunCD;
             }
             GetHoverInfo();
