@@ -213,7 +213,7 @@ namespace UltraReal.MobaMovement
         }
 
         [ServerCallback]
-        private void OnCollisionEnter(Collision collision)
+        public void OnCollisionEnter(Collision collision)
         {
             if (collision.gameObject.tag.Equals("Spell"))
             {
